@@ -36,7 +36,7 @@ class PolyRegression(nn.Module):
             if pretrained:
                 self.model = EfficientNet.from_pretrained(backbone, num_classes=num_outputs)
             else:
-                self.model = EfficientNet.from_name(backbone, override_params={'num_classes': num_outputs})
+                self.model = EfficientNet.from_name(backbone, num_classes=num_outputs)
             self.model._fc = OutputLayer(self.model._fc, extra_outputs)
         elif backbone == 'resnet34':
             self.model = resnet34(pretrained=pretrained)
