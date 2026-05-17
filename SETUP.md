@@ -19,8 +19,7 @@ source .venv/bin/activate.fish  # fish
 ## 2. Dependencies
 
 ```sh
-uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-uv pip install opencv-python efficientnet-pytorch pyyaml numpy tqdm
+uv pip install torch torchvision opencv-python efficientnet-pytorch pyyaml numpy tqdm
 ```
 
 > If you get a `weights_only` warning loading the checkpoint, add `weights_only=False` to `torch.load()` in the inference scripts.
