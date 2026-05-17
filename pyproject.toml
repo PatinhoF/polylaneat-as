@@ -1,0 +1,17 @@
+[tool.pyright]
+include = ["."]
+venvPath = "."
+venv = ".venv"
+
+# 1. Ignore the dynamic PyTorch import structure
+reportPrivateImportUsage = false
+reportMissingTypeStubs = false
+
+# 2. Tell Pyright to use basic type checking (not strict)
+typeCheckingMode = "basic"
+
+# 3. Silence warnings about untyped arrays and variables
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportCallIssue = false
