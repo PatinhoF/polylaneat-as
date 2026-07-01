@@ -1,0 +1,113 @@
+# =====================================================================
+# PolyLaneNet training config for custom COCO-segmentation lane datasets
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Training settings
+# ---------------------------------------------------------------------
+exps_dir: 'experiments'          # root folder for experiment outputs (relative to where you run train.py)
+iter_log_interval: 1             # log training iteration every N iterations
+iter_time_window: 100            # moving average window for the printed loss
+model_save_interval: 1           # save a checkpoint every N epochs
+seed: 0                          # seed for reproducibility
+backup:                          # leave empty: no automatic rclone backup
+
+# ---------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------
+model:
+  name: PolyRegression
+  parameters:
+    # num_outputs = num_lanes * (1 conf + 2 upper/lower + 4 poly coeffs)
+    #
+    # IMPORTANT: `num_lanes` here must be >= the max_lanes value that
+    # COCOLaneDataset prints when it loads your data, e.g.:
+    #   "1234 annotations found. max_points: 48 | max_lanes: 4"
+    # If it prints max_lanes: 4, then num_lanes=4 -> num_outputs = 4*7 = 28.
+    # The value below (35 -> 5 lanes) matches the original TuSimple config;
+    # adjust it after your first load if your lane count differs.
+    num_outputs: 35
+    pretrained: true
+    backbone: 'efficientnet-b0'
+    pred_category: false
+
+# ---------------------------------------------------------------------
+# Loss
+# ---------------------------------------------------------------------
+loss_parameters:
+  conf_weight: 1
+  lower_weight: 1
+  upper_weight: 1
+  cls_weight: 0
+  poly_weight: 300
+
+batch_size: 16
+epochs: 400
+
+# ---------------------------------------------------------------------
+# Optimizer / scheduler
+# ---------------------------------------------------------------------
+optimizer:
+  name: Adam
+  parameters:
+    lr: 3.0e-4
+
+lr_scheduler:
+  name: CosineAnnealingLR
+  parameters:
+    T_max: 400
+
+# ---------------------------------------------------------------------
+# Testing settings
+# ---------------------------------------------------------------------
+test_parameters:
+  conf_threshold: 0.5
+
+# ---------------------------------------------------------------------
+# Dataset settings
+# ---------------------------------------------------------------------
+datasets:
+  train:
+    type: LaneDataset          # <-- confirm this matches the `type:` used by your working configs
+    parameters:
+      dataset: coco
+      datasets:
+        - root: datasets/apagadas1
+          annotation: annotations/train.json
+        - root: datasets/dia1
+          annotation: annotations/train.json
+        - root: datasets/noite1
+          annotation: annotations/train.json
+        - root: datasets/nevoeiro1
+          annotation: annotations/train.json
+      img_size: [360, 640]
+      normalize: true
+      aug_chance: 0.9090909090909091   # 10/11
+      augmentations:
+        - name: Affine
+          parameters:
+            rotate: !!python/tuple [-10, 10]
+        - name: HorizontalFlip
+          parameters:
+            p: 0.5
+        - name: CropToFixedSize
+          parameters:
+            width: 1152
+            height: 648
+
+  val:
+    type: LaneDataset          # <-- same value as above
+    parameters:
+      dataset: coco
+      datasets:
+        - root: datasets/apagadas2
+          annotation: annotations/val.json
+        - root: datasets/dia2
+          annotation: annotations/val.json
+        - root: datasets/noite2
+          annotation: annotations/val.json
+        - root: datasets/nevoeiro-noite2.coco-segmentation
+          annotation: annotations/val.json
+      img_size: [360, 640]
+      normalize: true
+      augmentations: []         # no augmentation for validation

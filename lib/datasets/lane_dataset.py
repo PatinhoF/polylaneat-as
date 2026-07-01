@@ -10,6 +10,7 @@ from .elas import ELAS
 from .llamas import LLAMAS
 from .tusimple import TuSimple
 from .nolabel_dataset import NoLabelDataset
+from .coco_lane import COCOLaneDataset
 
 GT_COLOR = (255, 0, 0)
 PRED_HIT_COLOR = (0, 255, 0)
@@ -36,6 +37,8 @@ class LaneDataset(Dataset):
             self.dataset = ELAS(split=split, **kwargs)
         elif dataset == 'nolabel_dataset':
             self.dataset = NoLabelDataset(**kwargs)
+        elif dataset == 'coco':      
+            self.dataset = COCOLaneDataset(**kwargs)
         else:
             raise NotImplementedError()
 
