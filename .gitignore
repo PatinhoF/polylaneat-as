@@ -3,6 +3,5 @@ experiments
 .vscode
 venv
 config.yaml
-/datasets/
 lib/nms/build/
 lib/nms/dist/
