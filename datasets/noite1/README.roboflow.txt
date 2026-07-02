@@ -1,8 +1,8 @@
 
-Lane Det Night - 1 - vdataset lane-det-night-1
+Lane Detection - vdataset lane-detection-iq5sv
 ==============================
 
-This dataset was exported via roboflow.com on June 29, 2026 at 10:23 AM GMT
+This dataset was exported via roboflow.com on July 2, 2026 at 4:12 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,7 +17,7 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 236 images.
-Lane-Det-Night-1 are annotated in COCO Segmentation format.
+The dataset includes 235 images.
+Lane-Detection are annotated in COCO Segmentation format.
 
 No pre-processing or augmentation was applied.

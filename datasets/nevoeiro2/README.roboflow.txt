@@ -2,7 +2,7 @@
 lane-detection - vdataset lane-detection-eqjhj
 ==============================
 
-This dataset was exported via roboflow.com on June 29, 2026 at 12:54 AM GMT
+This dataset was exported via roboflow.com on July 2, 2026 at 7:47 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects

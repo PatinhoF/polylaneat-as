@@ -68,9 +68,9 @@ datasets:
           annotation: _annotations.coco.json
         - root: datasets/noite2/train
           annotation: _annotations.coco.json
-        - root: datasets/nevoeiro-noite2.coco-segmentation/train
+        - root: datasets/nevoeiro2/train
           annotation: _annotations.coco.json
-        - root: datasets/nevoeiro_noite_residual.coco-segmentation/train
+        - root: datasets/nevoeiro_residual/train
           annotation: _annotations.coco.json
       img_size: [360, 640]
       normalize: true

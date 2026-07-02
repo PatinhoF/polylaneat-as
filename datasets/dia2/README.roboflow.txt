@@ -1,8 +1,8 @@
 
-Lane Det Day - 2 - vdataset lane-det-day-2
+fix-multi-lines - vdataset fix-multi-lines
 ==============================
 
-This dataset was exported via roboflow.com on June 30, 2026 at 12:39 PM GMT
+This dataset was exported via roboflow.com on July 2, 2026 at 7:46 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -18,6 +18,6 @@ visit https://github.com/roboflow/notebooks
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
 The dataset includes 242 images.
-Lane-Det-Day-2 are annotated in COCO Segmentation format.
+Fix-multi-lines are annotated in COCO format.
 
 No pre-processing or augmentation was applied.

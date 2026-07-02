@@ -1,5 +1,5 @@
-# Lane Det Night - 2 > lane-det-night-2
-https://universe.roboflow.com/lanedetection-okhjm/lane-det-night-2
+# Lane Detection > lane-detection-iq5sv
+https://universe.roboflow.com/gustavos-workspace-3l5hn/lane-detection-iq5sv
 
 Provided by a Roboflow user
 License: CC BY 4.0
