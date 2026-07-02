@@ -2,7 +2,7 @@
 Lane Detection - vdataset lane-detection-iq5sv
 ==============================
 
-This dataset was exported via roboflow.com on July 2, 2026 at 4:13 PM GMT
+This dataset was exported via roboflow.com on July 2, 2026 at 10:53 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
