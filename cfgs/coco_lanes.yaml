@@ -7,7 +7,7 @@ backup:
 model:
   name: PolyRegression
   parameters:
-    num_outputs: 35
+    num_outputs: 56 #35 isto deve resolver o problema onde ha 8 lanes
     pretrained: true
     backbone: 'efficientnet-b0'
     pred_category: false
