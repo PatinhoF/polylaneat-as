@@ -41,8 +41,28 @@ inherited, UNMODIFIED, from PointsDataset.transform_annotation():
 
 This file's only job is: COCO annotations in -> ordered (x, y) lane point
 lists out.
+
+Lane-quality filtering
+-----------------------
+In addition to a minimum point-count check, lanes are filtered on two
+further geometric properties (mirroring the filtering used by the
+LaneATT-side CocoLane loader, which was found to help there):
+
+    * min_vertical_span_ratio: rejects lanes whose vertical extent is a
+      tiny fraction of the image height. A lane with 3+ points but almost
+      no vertical span is almost always a small segmentation artifact
+      (glare, shadow edge, mislabeled blob) rather than a real lane
+      marking.
+    * min_length_ratio: rejects lanes whose total polyline length is a
+      tiny fraction of the image diagonal, for the same reason.
+
+Both checks are ratios of image size rather than fixed pixel counts, so
+they behave consistently across differently-sized source images. Rejected
+lanes are counted and logged (see load_annotations) so it's easy to see
+how much of the raw annotation data is being filtered out.
 """
 import os
+import logging
 
 import numpy as np
 from pycocotools.coco import COCO
@@ -76,6 +96,8 @@ class COCOLaneDataset(object):
                  annotation=None,
                  category_id=1,
                  min_points=3,
+                 min_vertical_span_ratio=0.02,
+                 min_length_ratio=0.01,
                  max_lanes=None,
                  images_dir=None):
         """
@@ -96,6 +118,14 @@ class COCOLaneDataset(object):
                 (degenerate/too-thin masks, decode failures, etc.) are
                 silently discarded -- this is the "ignore invalid lanes
                 automatically" requirement.
+            min_vertical_span_ratio: minimum lane vertical extent, as a
+                fraction of the image height. Lanes with a smaller
+                vertical span than this are rejected as likely noise
+                (e.g. 0.02 => lane must span at least 2% of image height).
+            min_length_ratio: minimum total polyline length, as a
+                fraction of the image diagonal. Lanes shorter than this
+                are rejected as likely noise (e.g. 0.01 => lane must be
+                at least 1% of the image diagonal in length).
             max_lanes: optional override, exactly like in tusimple.py /
                 elas.py / llamas.py. Useful to force compatibility with a
                 model whose `num_outputs` was sized for a fixed number of
@@ -108,9 +138,21 @@ class COCOLaneDataset(object):
                 raise Exception('Either `datasets` or both `root` and `annotation` must be specified')
             datasets = [{'root': root, 'annotation': annotation, 'images_dir': images_dir}]
 
+        self.logger = logging.getLogger(__name__)
+
         self.datasets = datasets
         self.category_id = category_id
         self.min_points = min_points
+        self.min_vertical_span_ratio = min_vertical_span_ratio
+        self.min_length_ratio = min_length_ratio
+
+        # Filtering counters, tracked across all loaded COCO files, used
+        # only for the summary logged at the end of load_annotations().
+        self._total_lanes_before = 0
+        self._total_lanes_after = 0
+        self._rejected_by_points = 0
+        self._rejected_by_span = 0
+        self._rejected_by_length = 0
 
         self.load_annotations()
 
@@ -134,6 +176,20 @@ class COCOLaneDataset(object):
         print('{} annotations found. max_points: {} | max_lanes: {}'.format(
             len(self.annotations), self.max_points, self.max_lanes))
 
+        # Log lane-level filtering stats (via `logging`, not `print`, so
+        # this is captured in train.py's log.txt as well as stdout).
+        kept = self._total_lanes_after
+        seen = self._total_lanes_before
+        pct = 100.0 * kept / max(seen, 1)
+        self.logger.info(
+            "Lane filtering: kept %d / %d lanes (%.2f%%). Rejected: %d by min_points=%d, "
+            "%d by min_vertical_span_ratio=%.3f, %d by min_length_ratio=%.3f",
+            kept, seen, pct,
+            self._rejected_by_points, self.min_points,
+            self._rejected_by_span, self.min_vertical_span_ratio,
+            self._rejected_by_length, self.min_length_ratio,
+        )
+
     def _load_single_coco_dataset(self, dataset_cfg):
         root = dataset_cfg['root']
         annotation_path = dataset_cfg['annotation']
@@ -156,10 +212,12 @@ class COCOLaneDataset(object):
 
             lanes = []
             for ann in anns:
+                self._total_lanes_before += 1
                 points = self._annotation_to_points(ann)
                 if points is None:
                     continue  # invalid lane: ignored automatically
                 lanes.append(points)
+                self._total_lanes_after += 1
                 self.max_points = max(self.max_points, len(points))
 
             if len(lanes) == 0:
@@ -205,12 +263,33 @@ class COCOLaneDataset(object):
         return candidates[1] if images_dir is None else candidates[0]
 
     # ------------------------------------------------------------------
+    # Lane-quality helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _polyline_length(points):
+        """Total euclidean length of an ordered (x, y) point sequence, in
+        pixel units of whatever coordinate space `points` is expressed in.
+        """
+        if len(points) < 2:
+            return 0.0
+        pts = np.asarray(points, dtype=np.float32)
+        diffs = pts[1:] - pts[:-1]
+        seg_lens = np.sqrt((diffs ** 2).sum(axis=1))
+        return float(seg_lens.sum())
+
+    # ------------------------------------------------------------------
     # RLE mask -> ordered centerline points
     # ------------------------------------------------------------------
     def _annotation_to_points(self, ann):
         """Decodes a compressed COCO RLE mask and extracts an ordered
         (x, y) centerline for the lane, cropped to the annotation's
         bounding box for both correctness and speed.
+
+        In addition to the original point-count check, this also rejects
+        lanes that are too short vertically or geometrically to plausibly
+        be a real lane marking (see module docstring / __init__ docs for
+        the rationale). Rejections are counted in self._rejected_by_* so
+        load_annotations() can log a filtering summary.
         """
         rle = ann.get('segmentation')
         if not rle or 'counts' not in rle or 'size' not in rle:
@@ -230,6 +309,11 @@ class COCOLaneDataset(object):
         if mask is None or mask.sum() == 0:
             return None
 
+        # Full (uncropped) mask dimensions -- used below as the reference
+        # image size for the vertical-span and length ratio checks, since
+        # those should be relative to the whole image, not the crop.
+        img_h, img_w = mask.shape[0], mask.shape[1]
+
         bbox = ann.get('bbox', [0, 0, mask.shape[1], mask.shape[0]])
         x, y, w, h = bbox
         x0, y0 = max(int(round(x)), 0), max(int(round(y)), 0)
@@ -239,8 +323,28 @@ class COCOLaneDataset(object):
 
         cropped_mask = mask[y0:y1, x0:x1]
         points = self._centerline_from_mask(cropped_mask, x_offset=x0, y_offset=y0)
+
         if points is None or len(points) < self.min_points:
+            self._rejected_by_points += 1
             return None
+
+        # Reject lanes with too little vertical span -- typically small
+        # segmentation artifacts (glare, shadow edges, mislabeled blobs)
+        # rather than real lane markings.
+        ys = np.array([p[1] for p in points], dtype=np.float32)
+        vspan = float(ys.max() - ys.min())
+        if vspan < self.min_vertical_span_ratio * img_h:
+            self._rejected_by_span += 1
+            return None
+
+        # Reject lanes that are too short overall (geometric length),
+        # for the same reason.
+        lane_len = self._polyline_length(points)
+        img_diag = float(np.hypot(img_w, img_h))
+        if lane_len < self.min_length_ratio * img_diag:
+            self._rejected_by_length += 1
+            return None
+
         return points
 
     @staticmethod
