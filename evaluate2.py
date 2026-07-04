@@ -13,8 +13,8 @@ from lib.config import Config
 # Paths / settings (edit here)
 # -----------------------------
 CFG_PATH   = "cfgs/coco_lanes.yaml" # change according to the model
-#CKPT_PATH  = "model_150_aug0.5_v2.pt"
-CKPT_PATH  = "experiments/v2/models/model_150.pt"
+CKPT_PATH  = "model_150_aug0.5_v2.pt"
+#CKPT_PATH  = "experiments/v2/models/model_150.pt"
 TEST_ROOT = "datasets/test"   # evaluate each subdirectory independently
 CONFIDENCE = 0.25                  # override model conf threshold
 
@@ -37,6 +37,13 @@ POLY_SAMPLE_POINTS = 100
 # is treated as a "normal" image.
 CROSSING_LANE_COUNT = 6
 
+# ---- Lane deduplication ----
+# Two decoded lanes closer than this (normalized x distance, evaluated at
+# their shared y-range midpoint) are treated as duplicate detections of the
+# same physical lane; the lower-confidence one is suppressed. This is a
+# post-decode step and requires no retraining.
+DEDUP_X_THRESHOLD = 0.05  # fraction of image width; tune as needed
+
 # ---- Confidence / thickness sweep mode ----
 # When RUN_SWEEP is True, main() runs inference once per image (cached), then
 # re-thresholds/re-renders masks for every (confidence, thickness) pair below
@@ -44,6 +51,62 @@ CROSSING_LANE_COUNT = 6
 RUN_SWEEP = False
 CONFIDENCE_SWEEP = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 THICKNESS_SWEEP = [6, 10, 14, 20]
+
+
+def dedup_lane_rows(lane_rows: np.ndarray, x_threshold: float = DEDUP_X_THRESHOLD) -> np.ndarray:
+    """
+    Given a (num_lanes, 7) array of decoded lane rows
+    [conf, y_start, y_end, c0, c1, c2, c3], suppress lanes that are
+    near-duplicates of a higher-confidence lane (i.e. predicted to pass
+    through nearly the same point at a shared y-value).
+
+    Two lanes are compared at the midpoint of their overlapping
+    [y_start, y_end] range. If their predicted x at that y differs by less
+    than `x_threshold` (normalized, i.e. fraction of image width), the
+    lower-confidence lane is suppressed by zeroing its confidence -- this
+    lets downstream confidence-threshold filtering drop it naturally.
+
+    Rows with conf <= 0 are left untouched (already invalid).
+    """
+    rows = lane_rows.copy()
+    n = len(rows)
+    keep = np.ones(n, dtype=bool)
+
+    # Compare in descending-confidence order so higher-confidence lanes
+    # always win when suppressing a duplicate.
+    order = np.argsort(-rows[:, 0])
+
+    for i_idx in range(n):
+        i = order[i_idx]
+        if rows[i, 0] <= 0 or not keep[i]:
+            continue
+
+        y_start_i, y_end_i = rows[i, 1], rows[i, 2]
+        coeffs_i = rows[i, 3:7]
+
+        for j_idx in range(i_idx + 1, n):
+            j = order[j_idx]
+            if rows[j, 0] <= 0 or not keep[j]:
+                continue
+
+            y_start_j, y_end_j = rows[j, 1], rows[j, 2]
+            coeffs_j = rows[j, 3:7]
+
+            # Shared y-range between the two lanes; skip if they don't overlap.
+            lo = max(y_start_i, y_start_j)
+            hi = min(y_end_i, y_end_j)
+            if hi <= lo:
+                continue
+
+            y_mid = (lo + hi) / 2.0
+            x_i = np.polyval(coeffs_i, y_mid)
+            x_j = np.polyval(coeffs_j, y_mid)
+
+            if abs(x_i - x_j) < x_threshold:
+                keep[j] = False  # j has lower (or equal) confidence than i
+
+    rows[~keep, 0] = 0  # zero out confidence so downstream filtering drops it
+    return rows
 
 
 def lane_points_to_mask(lane_points_norm: np.ndarray, w: int, h: int, thickness: int = 6) -> np.ndarray:
@@ -163,7 +226,9 @@ def cache_directory_predictions(model, ann_file: str, img_w: int, img_h: int) ->
     Lanes are decoded with conf_threshold=0.0 so decode() doesn't zero out any
     lane's coefficients/confidence (sigmoid output is always >= 0). Real
     thresholding is applied later, per sweep combo, by comparing each row's
-    conf score directly.
+    conf score directly. Deduplication (merging near-identical duplicate
+    lanes) is applied once here, right after decoding, since it does not
+    depend on the confidence/thickness sweep settings.
 
     Returns:
       {
@@ -220,6 +285,7 @@ def cache_directory_predictions(model, ann_file: str, img_w: int, img_h: int) ->
             infer_total_time += (t1 - t0)
 
             lane_rows = decoded.cpu().numpy()[0]  # (num_lanes, 7)
+            lane_rows = dedup_lane_rows(lane_rows)
 
             cached.append({
                 "gt_mask": gt_mask,
@@ -384,6 +450,7 @@ def evaluate_one_directory(
             infer_total_time += (t1 - t0)
 
             lane_rows = decoded.cpu().numpy()[0]  # (num_lanes, 7)
+            lane_rows = dedup_lane_rows(lane_rows)
 
             # Prediction mask on original image size
             pred_mask = np.zeros((h0, w0), dtype=np.uint8)
@@ -563,3 +630,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

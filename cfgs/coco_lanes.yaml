@@ -53,10 +53,10 @@ datasets:
         - name: HorizontalFlip
           parameters:
             p: 0.5
-        - name: CropToFixedSize
-          parameters:
-            width: 1152
-            height: 648
+#        - name: CropToFixedSize
+#          parameters:
+#            width: 1152
+#            height: 648
   test:
     type: LaneDataset
     parameters:
